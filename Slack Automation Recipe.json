@@ -1,0 +1,220 @@
+{
+  "name": "Slack Automation Recipe",
+  "nodes": [
+    {
+      "parameters": {
+        "trigger": [
+          "message"
+        ],
+        "watchWorkspace": true,
+        "options": {
+          "userIds": "={{ [RecipeBot] }}"
+        }
+      },
+      "type": "n8n-nodes-base.slackTrigger",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "0dbab56e-d11d-4129-ba21-351c537d93a3",
+      "name": "Slack Trigger",
+      "webhookId": "56d0126d-38fa-41a5-b32a-c2c7721af7d7",
+      "credentials": {
+        "slackApi": {
+          "id": "TNXvGXBlC8mtRFna",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3ee1948c-adb1-4800-a105-0cba8860b220",
+              "name": "=recipe_name",
+              "value": "={{ ($json.event?.text || $json.text || '').replace(/<@[A-Z0-9]+>/g, '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "06881447-be3f-4089-b7c7-b1cdb7a39c77",
+              "name": "channel_id",
+              "value": "={{ $json.event?.channel || $json.channel }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        448,
+        0
+      ],
+      "id": "5a27b89e-65ad-4189-b880-e09f14ec1375",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an expert chef assistant from Tamil Nadu 🧑‍🍳✨.\nThe user wants to cook: {{ $json.recipe_name }}\n\nCRITICAL LANGUAGE & VOCABULARY RULES:\n1. STRICTLY TAMIL ONLY: Respond 100% in native Tamil script (தமிழ்). NEVER include Korean characters (like 큰 or 작은), Chinese, or any other foreign language characters anywhere in your response.\n2. MEASUREMENT VOCABULARY:\n   • For tablespoon: use \"டேபிள்ஸ்பூன்\" (or பெரிய ஸ்பூன்)\n   • For teaspoon: use \"டீஸ்பூன்\" (or சிறிய ஸ்பூன்)\n   • For cooking oil: use \"சமையல் எண்ணெய்\" (never use தைலம்)\n   • For garam masala: use \"கரம் மசாலா\"\n3. Use emojis (🍲, 🥗, 🧂, 🥄, 🔥, ⏱️, ✨, 😋) to keep the format attractive and readable.\n\nSTRUCTURE YOUR TAMIL RESPONSE EXACTLY LIKE THIS:\n\n🍛 *{{ $json.recipe_name }}*\n\n⏱️ *நேரம்:* தயாரிப்பு: X நிமிடங்கள் | சமையல்: Y நிமிடங்கள்\n👥 *பரிமாறும் அளவு:* 2 - 3 நபர்கள்\n\n🛒 *தேவையான பொருட்கள்:*\n🔹 பொருள் 1 - அளவு (எ.கா: 1 டேபிள்ஸ்பூன்)\n🔹 பொருள் 2 - அளவு (எ.கா: 1/2 டீஸ்பூன்)\n\n🔥 *செய்முறை:*\n1️⃣ முதல் படி விளக்கம்...\n2️⃣ அடுத்த படி விளக்கம்...\n3️⃣ சமையல் முடியும் படி...\n\n💡 *செஃப் டிப்ஸ்:* ஒரு சிறிய ரகசிய குறிப்பு!",
+        "messages": {
+          "messageValues": []
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        672,
+        0
+      ],
+      "id": "cec1c3e9-d930-491a-9255-988f18fde017",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        608,
+        208
+      ],
+      "id": "544dc4df-0411-4203-b22a-847ba2e0302f",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "CKYJiPk4NPKwppV6",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const slackData = $('Slack Trigger').first().json;\n\n// 1. Ignore bot messages (prevents loops)\nconst isBot = slackData.event?.bot_id || slackData.bot_id || slackData.event?.subtype === 'bot_message';\nif (isBot) {\n  return [];\n}\n\n// 2. Ignore past messages older than 2 minutes\nconst messageTs = parseFloat(slackData.event?.ts || slackData.ts || 0);\nconst nowInSeconds = Date.now() / 1000;\nif (messageTs && (nowInSeconds - messageTs > 120)) {\n  return [];\n}\n\n// 3. Format message\nconst editData = $('Edit Fields').first().json;\nconst channel = editData.channel_id || slackData.event?.channel || slackData.channel;\nconst aiResponse = $input.first().json.text;\n\nreturn {\n  json: {\n    channel_id: channel,\n    formatted_message: `${aiResponse}\\n\\n🍽️ _மகிழ்ச்சியாக சமைத்து ருசித்து மகிழுங்கள்!_ 😋✨`\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "e5df96e7-2f2a-49db-a533-17288826c179",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channel_id }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.formatted_message }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        1264,
+        0
+      ],
+      "id": "af3f112e-88bd-49ae-bffb-5fd852d9e734",
+      "name": "Send a message",
+      "webhookId": "4a1641d6-68a9-45bd-b6a6-2111918104da",
+      "credentials": {
+        "slackApi": {
+          "id": "TNXvGXBlC8mtRFna",
+          "name": "Slack account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Slack Trigger": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "4c41a085-3e23-4cd9-8767-97cfffea5bc5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f0de81795d1c262191101f57e59ca96c36c3ffe0bf277c735784a71210da25ac"
+  },
+  "nodeGroups": [],
+  "id": "8G5qZdFqwcu6Idan",
+  "tags": []
+}
